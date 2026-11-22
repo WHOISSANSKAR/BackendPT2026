@@ -1,5 +1,4 @@
-# changes done by vb: Minutes of Meeting (MOM) models — tables created by
-# sql/2026-11-22_create_project_mom.sql
+# changes done by vb
 from sqlalchemy import BigInteger, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 

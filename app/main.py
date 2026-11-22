@@ -15,6 +15,7 @@ from app.api.v1.endpoints import notifications
 from app.api.v1.endpoints import todo
 from app.api.v1.endpoints.weportal.dashboard import router as weportal_dashboard_router
 from app.api.v1.endpoints.mom import router as mom_router  # changes done by vb: Minutes of Meeting
+from app.api.v1.endpoints.checkout import router as checkout_router  # changes done by vb
 
 app = FastAPI(
     title="PseudoTeam API",
@@ -115,6 +116,13 @@ app.include_router(
     mom_router,
     prefix="/api/v1/customer",
     tags=["Customer Minutes of Meeting"],
+)
+
+# changes done by vb
+app.include_router(
+    checkout_router,
+    prefix="/api/v1/customer",
+    tags=["Customer Checkout"],
 )
 
 
