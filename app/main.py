@@ -14,6 +14,8 @@ from app.api.v1.endpoints.comments import router as comments
 from app.api.v1.endpoints import notifications
 from app.api.v1.endpoints import todo
 from app.api.v1.endpoints.weportal.dashboard import router as weportal_dashboard_router
+from app.api.v1.endpoints.weportal.my_projects import router as weportal_my_projects_router
+
 
 app = FastAPI(
     title="PseudoTeam API",
@@ -107,6 +109,12 @@ app.include_router(
     weportal_dashboard_router,
     prefix="/api/v1/weportal/dashboard",
     tags=["WePortal Dashboard"],
+)
+
+app.include_router(
+    weportal_my_projects_router,
+    prefix="/api/v1/weportal/my-projects",
+    tags=["WePortal My Projects"],
 )
 
 

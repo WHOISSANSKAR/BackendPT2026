@@ -1,6 +1,5 @@
-# app/services/weportal/auth_service.py
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import verify_password, create_weportal_access_token
@@ -12,8 +11,9 @@ def authenticate_weuser(
     db: Session,
     credentials: WePortalLoginRequest,
 ) -> WePortalSession:
+    normalized_email = credentials.email.strip().lower()
     user = db.scalar(
-        select(WeUser).where(WeUser.email == credentials.email.strip())
+        select(WeUser).where(func.lower(WeUser.email) == normalized_email)
     )
 
     if not user or not verify_password(credentials.password, user.password):
