@@ -1,4 +1,3 @@
-
 import re
 from typing import Any
 
@@ -13,36 +12,56 @@ from app.models.todo import Todo
 
 
 # =========================================================
-# HELPER: GET PROJECT STATUS
+# HELPER: GET PROJECT STATUS (USING ONLY plist_status)
+# Supported statuses:
+#   1. "No SP Assigned" -> Not Started
+#   2. "In Progress"
+#   3. "On Hold"
+#   4. "Delivered"
 # =========================================================
+
+def _normalize_status(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = re.sub(r"[_\-]+", " ", value.strip().lower())
+    return re.sub(r"\s+", " ", cleaned)
+
 
 def get_project_status(project: Project) -> str:
     """
-    Use plist_project_status as primary status.
-    Fall back to plist_status if empty.
+    Resolve normalized status key strictly from project.plist_status.
     """
+    raw = _normalize_status(project.plist_status)
 
-    return re.sub(
-        r"\s+",
-        " ",
-        (
-            project.plist_project_status
-            or project.plist_status
-            or ""
-        ).strip().lower(),
-    )
+    if raw in {"no sp assigned", "not started"}:
+        return "not started"
+    if raw == "in progress":
+        return "in progress"
+    if raw == "on hold":
+        return "on hold"
+    if raw == "delivered":
+        return "delivered"
+
+    return raw
 
 
 def get_project_status_display(project: Project) -> str:
     """
-    Return project status for frontend.
+    Return display status strictly from project.plist_status.
     """
+    status_key = get_project_status(project)
 
-    return (
-        project.plist_project_status
-        or project.plist_status
-        or "Unknown"
-    ).strip()
+    display_map = {
+        "not started": "Not Started",
+        "in progress": "In Progress",
+        "on hold": "On Hold",
+        "delivered": "Delivered",
+    }
+
+    if status_key in display_map:
+        return display_map[status_key]
+
+    return (project.plist_status or "Unknown").strip()
 
 
 # =========================================================
@@ -59,19 +78,15 @@ def calculate_project_kpis(
     critical = 0
 
     for project in projects:
+        status_key = get_project_status(project)
 
-        project_status = get_project_status(project)
-
-        if project_status == "not started":
+        if status_key == "not started":
             not_started += 1
-
-        elif project_status == "in progress":
+        elif status_key == "in progress":
             in_progress += 1
-
-        elif project_status in ["completed", "delivered"]:
+        elif status_key == "delivered":
             completed += 1
-
-        elif project_status in ["critical", "at risk", "on hold"]:
+        elif status_key == "on hold":
             critical += 1
 
     return {
@@ -91,34 +106,26 @@ def calculate_project_progress_data(
     projects: list[Project],
 ) -> list[dict[str, Any]]:
 
-    # These are estimated percentages based on status.
-    # Actual milestone/task progress should replace these
-    # values when that data is connected.
-
     progress_map = {
         "delivered": 100,
-        "completed": 100,
         "in progress": 50,
-        "no sp assigned": 0,
         "not started": 0,
         "on hold": 0,
-        "at risk": 0,
-        "critical": 0,
     }
 
     progress_data = []
 
     for project in projects:
-
-        project_status = get_project_status(project)
-
-        progress = progress_map.get(project_status, 0)
+        status_key = get_project_status(project)
+        progress = progress_map.get(status_key, 0)
+        raw_plist_status = (project.plist_status or "").strip() or None
 
         progress_data.append({
             "id": project.plist_id,
             "projectId": project.plist_projectid,
             "title": project.plist_title,
             "status": get_project_status_display(project),
+            "plistStatus": raw_plist_status,
             "progress": progress,
         })
 
@@ -135,13 +142,9 @@ def calculate_overall_project_progress(
 
     progress_map = {
         "delivered": 100,
-        "completed": 100,
         "in progress": 50,
-        "no sp assigned": 0,
         "not started": 0,
         "on hold": 0,
-        "at risk": 0,
-        "critical": 0,
     }
 
     if not projects:
@@ -150,12 +153,8 @@ def calculate_overall_project_progress(
     total_progress = 0
 
     for project in projects:
-
-        project_status = get_project_status(project)
-
-        progress = progress_map.get(project_status, 0)
-
-        total_progress += progress
+        status_key = get_project_status(project)
+        total_progress += progress_map.get(status_key, 0)
 
     return round(total_progress / len(projects))
 
@@ -169,6 +168,7 @@ def serialize_project(
 ) -> dict[str, Any]:
 
     project_status = get_project_status_display(project)
+    raw_plist_status = (project.plist_status or "").strip() or None
 
     return {
         "id": project.plist_id,
@@ -200,6 +200,7 @@ def serialize_project(
 
         "status": project_status,
         "projectStatus": project_status,
+        "plistStatus": raw_plist_status,
 
         "deliveredOn": project.plist_delivered_on,
         "paymentOn": project.plist_payment_on,
@@ -283,10 +284,6 @@ def get_customer_dashboard(
 
     customer_id = str(customer.pown_id)
 
-    # -----------------------------------------------------
-    # A. FETCH ALL CUSTOMER PROJECTS
-    # -----------------------------------------------------
-
     projects = db.scalars(
         select(Project)
         .where(
@@ -299,42 +296,15 @@ def get_customer_dashboard(
 
     projects = list(projects)
 
-    # -----------------------------------------------------
-    # B. FETCH LATEST FIVE PROJECTS
-    # EXCLUDE DELIVERED PROJECTS
-    # -----------------------------------------------------
-
     recent_projects = [
         project
         for project in projects
         if get_project_status(project) != "delivered"
     ][:5]
 
-    # -----------------------------------------------------
-    # C. PROJECT KPI COUNTS
-    # -----------------------------------------------------
-
     project_kpis = calculate_project_kpis(projects)
-
-    # -----------------------------------------------------
-    # D. PROJECT PROGRESS GRAPH DATA
-    # -----------------------------------------------------
-
-    project_progress = calculate_project_progress_data(
-        projects
-    )
-
-    # -----------------------------------------------------
-    # E. OVERALL PROJECT PROGRESS
-    # -----------------------------------------------------
-
-    overall_progress = calculate_overall_project_progress(
-        projects
-    )
-
-    # -----------------------------------------------------
-    # F. FETCH CUSTOMER NOTIFICATIONS
-    # -----------------------------------------------------
+    project_progress = calculate_project_progress_data(projects)
+    overall_progress = calculate_overall_project_progress(projects)
 
     notifications = db.scalars(
         select(Notification)
@@ -355,10 +325,6 @@ def get_customer_dashboard(
         if not notification.ntfn_readflag
     )
 
-    # -----------------------------------------------------
-    # G. FETCH CUSTOMER CART ITEMS
-    # -----------------------------------------------------
-
     cart_items = db.scalars(
         select(Cart)
         .where(
@@ -370,10 +336,6 @@ def get_customer_dashboard(
     ).all()
 
     cart_items = list(cart_items)
-
-    # -----------------------------------------------------
-    # H. FETCH CUSTOMER CALENDAR EVENTS
-    # -----------------------------------------------------
 
     calendar_events = db.scalars(
         select(Todo)
@@ -389,10 +351,6 @@ def get_customer_dashboard(
 
     calendar_events = list(calendar_events)
 
-    # -----------------------------------------------------
-    # I. FINAL DASHBOARD RESPONSE
-    # -----------------------------------------------------
-
     return {
         "user": {
             "id": customer.pown_id,
@@ -405,45 +363,27 @@ def get_customer_dashboard(
         },
 
         "dashboard": {
-
-            # All customer projects
             "projects": [
                 serialize_project(project)
                 for project in projects
             ],
-
-            # Latest five projects
             "recentProjects": [
                 serialize_project(project)
                 for project in recent_projects
             ],
-
-            # Project KPIs
             "projectKpis": project_kpis,
-
-            # Project progress graph
             "projectProgress": project_progress,
-
-            # Overall progress
             "overallProgress": overall_progress,
-
-            # Notifications
             "unreadNotificationsCount": unread_notifications_count,
-
             "notifications": [
                 serialize_notification(notification)
                 for notification in notifications
             ],
-
-            # Cart
             "cartCount": len(cart_items),
-
             "addedToCart": [
                 serialize_cart_item(item)
                 for item in cart_items
             ],
-
-            # Calendar
             "calendarEvents": [
                 serialize_calendar_event(event)
                 for event in calendar_events

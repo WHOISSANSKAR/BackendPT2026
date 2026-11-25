@@ -1,9 +1,9 @@
 from sqlalchemy import (
     BigInteger,
+    Float,
+    Integer,
     String,
     Text,
-    Integer,
-    Float,
 )
 from sqlalchemy.dialects.mysql import LONGBLOB
 from sqlalchemy.orm import Mapped, mapped_column

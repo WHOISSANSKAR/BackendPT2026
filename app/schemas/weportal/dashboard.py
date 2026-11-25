@@ -2,16 +2,16 @@ from pydantic import BaseModel
 
 
 class WePortalDashboardCounts(BaseModel):
-    project_owners: int
-    service_providers: int
-    project_list: int
-    project_list_by_admin: int
-    hardwares: int
-    orders_pending: int
-    orders_placed: int
-    tickets_count: int
-    unread_notifications_count: int
-    hardware_orders_count: int
+    project_owners: int = 0
+    service_providers: int = 0
+    project_list: int = 0
+    project_list_by_admin: int = 0
+    hardwares: int = 0
+    orders_pending: int = 0
+    orders_placed: int = 0
+    tickets_count: int = 0
+    unread_notifications_count: int = 0
+    hardware_orders_count: int = 0
 
 
 class WePortalRecentProject(BaseModel):

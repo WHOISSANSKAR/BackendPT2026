@@ -11,7 +11,10 @@ router = APIRouter()
 
 
 @router.get("/order-addresses")
-def fetch_addresses(db: Session = Depends(get_db), current_customer=Depends(get_current_customer)):
+def fetch_addresses(
+    db: Session = Depends(get_db),
+    current_customer=Depends(get_current_customer),
+):
     return list_addresses(db, int(current_customer.pown_id))
 
 
@@ -30,4 +33,9 @@ def create_order(
     db: Session = Depends(get_db),
     current_customer=Depends(get_current_customer),
 ):
-    return place_order(db, int(current_customer.pown_id), payload.address_id, payload.items)
+    return place_order(
+        db,
+        int(current_customer.pown_id),
+        payload.address_id,
+        payload.items,
+    )
