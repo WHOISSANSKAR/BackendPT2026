@@ -5,6 +5,7 @@ import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -26,7 +27,10 @@ from app.schemas.auth import (
     CustomerSetPasswordResponse,
 )
 
-load_dotenv(override=True)
+# Load .env from project root (pseudoteam-pybackend/.env) regardless of launch cwd
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(BACKEND_ROOT / ".env", override=True)
+load_dotenv(override=False)
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +63,12 @@ def _send_email(to_email: str, subject: str, body: str) -> None:
 
     if not smtp_host:
         logger.warning(
-            "MAIL_HOST not configured; skipping email to %s. Subject: %s",
+            "MAIL_HOST/SMTP_HOST not set in env (checked %s); email to %s was NOT sent via SMTP. Subject: %s\nBody:\n%s",
+            BACKEND_ROOT / ".env",
             to_email,
             subject,
+            body,
         )
-        logger.info("Verification/Email body for %s:\n%s", to_email, body)
         return
 
     msg = EmailMessage()
@@ -86,6 +91,8 @@ def _send_email(to_email: str, subject: str, body: str) -> None:
             if smtp_user and smtp_pass:
                 server.login(smtp_user, smtp_pass)
             server.send_message(msg)
+
+    logger.info("SMTP email dispatched to %s (via %s:%s) | Subject: %s", to_email, smtp_host, smtp_port, subject)
 
 
 def _send_customer_verification_email(
