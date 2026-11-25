@@ -1,10 +1,9 @@
-
 from sqlalchemy import (
     BigInteger,
-    String,
     Boolean,
-    Text,
     LargeBinary,
+    String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -119,6 +118,7 @@ class ProjectOwner(Base):
     pown_profile_completion_flag: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
+        default=False,
     )
 
     pown_dp: Mapped[bytes | None] = mapped_column(
@@ -149,5 +149,5 @@ class ProjectOwner(Base):
     pown_verified: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
-        default=True,
+        default=False,
     )

@@ -1,9 +1,9 @@
 import os
-import bcrypt
-
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+
+import bcrypt
 from dotenv import load_dotenv
+from jose import jwt
 
 load_dotenv()
 
@@ -14,28 +14,30 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 )
 
 
+def get_password_hash(plain_password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
+
 def verify_password(
     plain_password: str,
-    hashed_password: str | None
+    hashed_password: str | None,
 ) -> bool:
-
     if not hashed_password:
         return False
 
     try:
         compatible_hash = hashed_password.replace("$2y$", "$2b$", 1)
-
         return bcrypt.checkpw(
             plain_password.encode("utf-8"),
             compatible_hash.encode("utf-8"),
         )
-
     except (ValueError, TypeError):
         return False
 
 
 def create_access_token(customer_id: int) -> str:
-
     if not JWT_SECRET_KEY:
         raise RuntimeError("JWT_SECRET_KEY is not configured")
 
@@ -60,7 +62,6 @@ def create_weportal_access_token(
     role: str,
     emp_code: str | None = None,
 ) -> str:
-
     if not JWT_SECRET_KEY:
         raise RuntimeError("JWT_SECRET_KEY is not configured")
 
