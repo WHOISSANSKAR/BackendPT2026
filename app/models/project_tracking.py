@@ -175,9 +175,25 @@ class ProjectPlannerTask(Base):
         nullable=True,
     )
 
+    pptasks_sp_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
+    )
+
     pptasks_date_of_completion: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
+    )
+
+    pptasks_proof_of_completion: Mapped[bytes | None] = mapped_column(
+        LONGBLOB,
+        nullable=True,
+    )
+
+    pptasks_proof_completion_approved: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
     )
 
     pptasks_sp_status: Mapped[str | None] = mapped_column(
@@ -190,10 +206,16 @@ class ProjectPlannerTask(Base):
         nullable=True,
     )
 
-    pptasks_proof_completion_approved: Mapped[int] = mapped_column(
+    pptasks_invoice_raised_flag: Mapped[int | None] = mapped_column(
         Integer,
-        nullable=False,
+        nullable=True,
         default=0,
+    )
+
+    pptasks_payment: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        default=0.0,
     )
 
     pptasks_planner_id: Mapped[int | None] = mapped_column(

@@ -21,12 +21,9 @@ router = APIRouter()
 @router.get("/projects/tracking")
 def customer_tracking_projects(
     db: Session = Depends(get_db),
-    current_customer: ProjectOwner = Depends(
-        get_current_customer
-    ),
+    current_customer: ProjectOwner = Depends(get_current_customer),
 ):
     customer_id = str(current_customer.pown_id)
-
     return get_customer_tracking_projects(
         db=db,
         customer_id=customer_id,
@@ -37,9 +34,7 @@ def customer_tracking_projects(
 def customer_project_tracking(
     project_id: int,
     db: Session = Depends(get_db),
-    current_customer: ProjectOwner = Depends(
-        get_current_customer
-    ),
+    current_customer: ProjectOwner = Depends(get_current_customer),
 ):
     customer_id = str(current_customer.pown_id)
 
@@ -64,9 +59,7 @@ def customer_project_tracking(
         project=project,
     )
 
-    # Use the logged-in Project Owner's name instead of plist_name
     result["project"]["customer_name"] = current_customer.pown_name
-
     return result
 
 
@@ -76,9 +69,7 @@ def get_task_proof_of_completion(
     task_id: int,
     download: bool = Query(default=False),
     db: Session = Depends(get_db),
-    current_customer: ProjectOwner = Depends(
-        get_current_customer
-    ),
+    current_customer: ProjectOwner = Depends(get_current_customer),
 ):
     payload = get_task_poc_blob_payload(
         db=db,
