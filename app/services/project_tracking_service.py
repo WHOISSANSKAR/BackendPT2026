@@ -26,8 +26,172 @@ def _parse_date_safe(value: str | None) -> datetime | None:
 
 
 def is_task_completed(task: ProjectPlannerTask) -> bool:
-    status = (task.pptasks_pt_status or "").strip().lower()
-    return status in COMPLETED_TASK_STATUSES
+    pt_status = (getattr(task, "pptasks_pt_status", None) or "").strip().lower()
+    sp_status = (getattr(task, "pptasks_sp_status", None) or "").strip().lower()
+    return (
+        pt_status in COMPLETED_TASK_STATUSES
+        or sp_status in COMPLETED_TASK_STATUSES
+    )
+
+
+def _has_poc_blob(task: ProjectPlannerTask) -> bool:
+    blob = getattr(task, "pptasks_proof_of_completion", None)
+    if blob is None:
+        return False
+    if isinstance(blob, (bytes, bytearray, memoryview)):
+        return len(blob) > 0
+    return bool(str(blob).strip())
+
+
+def _extract_task_poc_fields(
+    task: ProjectPlannerTask, project_id: int | None = None
+) -> dict:
+    """
+    Extract PoC metadata safely from ProjectPlannerTask.
+    Supports BLOB column (`pptasks_proof_of_completion`) and optional URL columns.
+    """
+    has_blob = _has_poc_blob(task)
+
+    poc_file_url = None
+    for attr in (
+        "pptasks_proof_completion_url",
+        "pptasks_proof_of_completion_url",
+        "pptasks_proof_completion_file",
+        "pptasks_poc_url",
+        "pptasks_poc_file",
+    ):
+        val = getattr(task, attr, None)
+        if val and isinstance(val, str) and val.strip():
+            poc_file_url = val.strip()
+            break
+
+    poc_available = bool(has_blob or poc_file_url)
+    poc_approved = bool(getattr(task, "pptasks_proof_completion_approved", False))
+    task_fulfilled = is_task_completed(task)
+    can_view_poc = bool(task_fulfilled and poc_available and poc_approved)
+
+    resolved_url = None
+    if can_view_poc:
+        if has_blob and project_id is not None:
+            resolved_url = f"/api/projects/{project_id}/tasks/{task.pptasks_id}/poc"
+        else:
+            resolved_url = poc_file_url
+
+    poc_file_name = None
+    for attr in (
+        "pptasks_proof_completion_name",
+        "pptasks_poc_file_name",
+        "pptasks_poc_name",
+    ):
+        val = getattr(task, attr, None)
+        if val and str(val).strip():
+            poc_file_name = str(val).strip()
+            break
+
+    if not poc_file_name:
+        if poc_file_url:
+            poc_file_name = (
+                poc_file_url.split("?")[0].split("/")[-1]
+                or f"task-{task.pptasks_id}-poc"
+            )
+        elif has_blob:
+            poc_file_name = f"task-{task.pptasks_id}-proof-of-completion"
+
+    poc_notes = None
+    for attr in (
+        "pptasks_proof_completion_notes",
+        "pptasks_poc_remarks",
+        "pptasks_poc_notes",
+    ):
+        val = getattr(task, attr, None)
+        if val and str(val).strip():
+            poc_notes = str(val).strip()
+            break
+
+    return {
+        "proof_completion_approved": poc_approved,
+        "has_poc_blob": has_blob,
+        "poc_available": poc_available,
+        "poc_approved": poc_approved,
+        "poc_url": resolved_url,
+        "poc_file_url": resolved_url,
+        "poc_file_name": poc_file_name if can_view_poc else None,
+        "poc_notes": poc_notes if can_view_poc else None,
+        "can_view_poc": can_view_poc,
+    }
+
+
+def detect_poc_media_type(data: bytes) -> tuple[str, str]:
+    """
+    Detect MIME type and file extension from magic bytes for BLOB PoC files.
+    """
+    if data.startswith(b"%PDF-"):
+        return "application/pdf", ".pdf"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", ".png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", ".jpg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif", ".gif"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp", ".webp"
+    if data.startswith(b"PK\x03\x04"):
+        return "application/zip", ".zip"
+    return "application/octet-stream", ".bin"
+
+
+def get_task_poc_blob_payload(
+    db: Session,
+    project_id: int,
+    customer_id: str,
+    task_id: int,
+) -> tuple[bytes, str, str] | None:
+    """
+    Validate project ownership, task fulfillment, PoC presence, and PoC approval,
+    then return (raw_bytes, media_type, filename).
+    """
+    row = (
+        db.query(ProjectPlannerTask)
+        .join(
+            ProjectPlanner,
+            ProjectPlannerTask.pptasks_planner_id == ProjectPlanner.pplnr_id,
+        )
+        .join(
+            ProjectScope,
+            ProjectPlanner.pplnr_scope_id == ProjectScope.pscope_id,
+        )
+        .join(Project, ProjectScope.pscope_project_id == Project.plist_id)
+        .filter(
+            Project.plist_id == project_id,
+            Project.plist_customer_id == str(customer_id),
+            ProjectPlannerTask.pptasks_id == task_id,
+        )
+        .first()
+    )
+
+    if not row:
+        return None
+
+    poc_meta = _extract_task_poc_fields(row, project_id=project_id)
+    if not poc_meta["can_view_poc"] or not poc_meta["has_poc_blob"]:
+        return None
+
+    blob_raw = getattr(row, "pptasks_proof_of_completion", None)
+    if blob_raw is None:
+        return None
+
+    raw_bytes = bytes(blob_raw)
+    if not raw_bytes:
+        return None
+
+    media_type, ext = detect_poc_media_type(raw_bytes)
+    base_name = poc_meta["poc_file_name"] or f"task-{task_id}-proof-of-completion"
+    if not base_name.lower().endswith(ext) and ext != ".bin":
+        filename = f"{base_name}{ext}"
+    else:
+        filename = base_name
+
+    return raw_bytes, media_type, filename
 
 
 def calculate_project_progress(db: Session, project_id: int):
@@ -120,6 +284,10 @@ def calculate_project_progress(db: Session, project_id: int):
                     normalized_task_weight * task_progress
                 ) / 100
 
+                poc_fields = _extract_task_poc_fields(
+                    task, project_id=project_id
+                )
+
                 task_results.append({
                     "id": task.pptasks_id,
                     "title": task.pptasks_task_title,
@@ -136,9 +304,7 @@ def calculate_project_progress(db: Session, project_id: int):
                         normalized_task_weight, 2
                     ),
                     "progress": task_progress,
-                    "proof_completion_approved": bool(
-                        task.pptasks_proof_completion_approved
-                    ),
+                    **poc_fields,
                     "created_at": task.created_at,
                     "updated_at": task.updated_at,
                 })
